@@ -1,0 +1,28 @@
+# Secrets
+.env
+*.pem
+*.key
+*.p12
+*.jks
+
+# Java / Maven
+target/
+*.class
+*.log
+!**/src/**/resources/**/*.pem.example
+
+# Node / frontend
+node_modules/
+dist/
+.vite/
+
+# IDEs / OS
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+
+# Local data
+/data/
