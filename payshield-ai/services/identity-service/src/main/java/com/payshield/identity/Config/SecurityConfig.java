@@ -1,4 +1,4 @@
-package com.payshield.identity.config;
+package com.payshield.identity.Config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -23,4 +23,6 @@ public class SecurityConfig {
                 .anyRequest().denyAll());
         return http.build();
     }
+
+    
 }
