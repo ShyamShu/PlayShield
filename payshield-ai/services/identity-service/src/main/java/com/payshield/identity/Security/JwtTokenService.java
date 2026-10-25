@@ -1,6 +1,5 @@
 package com.payshield.identity.Security;
 
-
 import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
@@ -34,6 +33,7 @@ public class JwtTokenService {
             Collection<String> roles) {
 
         Instant now = Instant.now();
+
         Instant expiresAt = now.plusSeconds(
                 jwtProperties.getAccessTokenTtlMinutes() * 60
         );

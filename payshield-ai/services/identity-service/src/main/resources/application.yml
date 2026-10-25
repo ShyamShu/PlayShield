@@ -26,8 +26,6 @@ management:
 
 payshield:
   jwt:
-    private-key-path: "D:/Playshield/keys/private.pem"
-    public-key-path: "D:/Playshield/keys/public.pem"
     issuer: "http://payshield-identity-service"
     audience: "payshield-api"
     access-token-ttl-minutes: 15
