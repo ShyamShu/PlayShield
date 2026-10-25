@@ -1,16 +1,8 @@
 
 package com.payshield.identity.Services;
 
-import com.payshield.identity.Entity.Role;
-import com.payshield.identity.Enum.RoleName;
-import com.payshield.identity.Entity.User;
-import com.payshield.identity.Repository.RoleRepository;
-import com.payshield.identity.Repository.UserRepository;
-import com.payshield.identity.Security.JwtTokenService;
-import com.payshield.identity.dto.request.LoginRequest;
-import com.payshield.identity.dto.request.RefreshTokenRequest;
-import com.payshield.identity.dto.request.RegisterRequest;
-import com.payshield.identity.dto.response.AuthResponse;
+import java.util.List;
+import java.util.Locale;
 
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -21,7 +13,18 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
+import com.payshield.identity.Config.JwtProperties;
+import com.payshield.identity.Entity.RefreshToken;
+import com.payshield.identity.Entity.Role;
+import com.payshield.identity.Entity.User;
+import com.payshield.identity.Enum.RoleName;
+import com.payshield.identity.Repository.RoleRepository;
+import com.payshield.identity.Repository.UserRepository;
+import com.payshield.identity.Security.JwtTokenService;
+import com.payshield.identity.dto.request.LoginRequest;
+import com.payshield.identity.dto.request.RefreshTokenRequest;
+import com.payshield.identity.dto.request.RegisterRequest;
+import com.payshield.identity.dto.response.AuthResponse;
 
 @Service
 public class AuthService {
@@ -31,25 +34,31 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtTokenService jwtTokenService;
+    private final RefreshTokenService refreshTokenService;
+    private final JwtProperties jwtProperties;
 
     public AuthService(
             UserRepository userRepository,
             RoleRepository roleRepository,
             PasswordEncoder passwordEncoder,
             AuthenticationManager authenticationManager,
-            JwtTokenService jwtTokenService) {
+            JwtTokenService jwtTokenService,
+            RefreshTokenService refreshTokenService,
+            JwtProperties jwtProperties) {
 
         this.userRepository = userRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
         this.authenticationManager = authenticationManager;
         this.jwtTokenService = jwtTokenService;
+        this.refreshTokenService = refreshTokenService;
+        this.jwtProperties = jwtProperties;
     }
 
     @Transactional
     public AuthResponse register(RegisterRequest request) {
 
-        String email = request.getEmail().trim().toLowerCase();
+        String email = normalizeEmail(request.getEmail());
 
         if (userRepository.existsByEmail(email)) {
             throw new IllegalArgumentException(
@@ -64,7 +73,7 @@ public class AuthService {
 
         User user = new User();
         user.setEmail(email);
-        user.setDisplayName(request.getDisplayName());
+        user.setDisplayName(request.getDisplayName().trim());
         user.setPasswordHash(
                 passwordEncoder.encode(request.getPassword())
         );
@@ -73,24 +82,13 @@ public class AuthService {
 
         User savedUser = userRepository.save(user);
 
-        List<String> roles = savedUser.getRoles()
-                .stream()
-                .map(role -> role.getName().name())
-                .toList();
-
-        String accessToken = jwtTokenService.generateAccessToken(
-                savedUser.getId(),
-                savedUser.getEmail(),
-                roles
-        );
-
-        return new AuthResponse(accessToken);
+        return issueTokens(savedUser, getRoleNames(savedUser));
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public AuthResponse login(LoginRequest request) {
 
-        String email = request.getEmail().trim().toLowerCase();
+        String email = normalizeEmail(request.getEmail());
 
         Authentication authentication =
                 authenticationManager.authenticate(
@@ -113,21 +111,88 @@ public class AuthService {
                         : authority)
                 .toList();
 
+        return issueTokens(user, roles);
+    }
+
+    @Transactional
+    public AuthResponse refresh(RefreshTokenRequest request) {
+
+        // Validate the existing refresh token before rotating it.
+        RefreshToken currentToken =
+                refreshTokenService.validateRefreshToken(
+                        request.getRefreshToken()
+                );
+
+        // This method is transactional too, so the lazy User relationship
+        // remains accessible while this outer transaction is active.
+        User user = currentToken.getUser();
+
+        if (!user.isEnabled()) {
+            refreshTokenService.revokeAllUserTokens(user.getId());
+
+            throw new IllegalArgumentException(
+                    "This account is disabled"
+            );
+        }
+
+        // Invalidates the old token and returns its replacement.
+        String newRefreshToken =
+                refreshTokenService.rotateRefreshToken(
+                        request.getRefreshToken()
+                );
+
+        List<String> roles = getRoleNames(user);
+
+        String newAccessToken = jwtTokenService.generateAccessToken(
+                user.getId(),
+                user.getEmail(),
+                roles
+        );
+
+        long expiresIn = jwtProperties.getAccessTokenTtlMinutes() * 60;
+
+        return new AuthResponse(
+                newAccessToken,
+                newRefreshToken,
+                expiresIn
+        );
+    }
+
+    @Transactional
+    public void logout(RefreshTokenRequest request) {
+        refreshTokenService.revokeRefreshToken(
+                request.getRefreshToken()
+        );
+    }
+
+    private AuthResponse issueTokens(User user, List<String> roles) {
+
         String accessToken = jwtTokenService.generateAccessToken(
                 user.getId(),
                 user.getEmail(),
                 roles
         );
 
-        return new AuthResponse(accessToken);
+        String refreshToken =
+                refreshTokenService.createRefreshToken(user);
+
+        long expiresIn = jwtProperties.getAccessTokenTtlMinutes() * 60;
+
+        return new AuthResponse(
+                accessToken,
+                refreshToken,
+                expiresIn
+        );
     }
 
-    public AuthResponse refresh(RefreshTokenRequest request) {
+    private List<String> getRoleNames(User user) {
+        return user.getRoles()
+                .stream()
+                .map(role -> role.getName().name())
+                .toList();
+    }
 
-        // Implement once refresh-token persistence, validation,
-        // expiration, rotation, and revocation are configured.
-        throw new UnsupportedOperationException(
-                "Refresh-token flow has not been implemented yet"
-        );
+    private String normalizeEmail(String email) {
+        return email.trim().toLowerCase(Locale.ROOT);
     }
 }

@@ -61,6 +61,12 @@ public class RefreshToken {
     public RefreshToken() {
     }
 
+    public RefreshToken(User user, String tokenHash, OffsetDateTime expiresAt) {
+        this.user = user;
+        this.tokenHash = tokenHash;
+        this.expiresAt = expiresAt;
+    }
+
     @PrePersist
     protected void onCreate() {
         if (createdAt == null) {
@@ -119,4 +125,26 @@ public class RefreshToken {
     public void setReplacedBy(RefreshToken replacedBy) {
         this.replacedBy = replacedBy;
     }
+
+
+    
+    public boolean isExpired() {
+        return expiresAt == null
+                || !expiresAt.isAfter(OffsetDateTime.now());
+    }
+
+    public boolean isRevoked() {
+        return revokedAt != null;
+    }
+
+    public boolean isActive() {
+        return !isExpired() && !isRevoked();
+    }
+
+    public void revoke() {
+        if (revokedAt == null) {
+            revokedAt = OffsetDateTime.now();
+        }
+    }
+
 }

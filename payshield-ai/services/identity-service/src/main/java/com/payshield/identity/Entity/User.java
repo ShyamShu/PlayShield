@@ -175,4 +175,8 @@ public class User {
     public void removeRole(Role role) {
         this.roles.remove(role);
     }
+
+    public boolean isEnabled() {
+        return this.enabled;
+    }
 }

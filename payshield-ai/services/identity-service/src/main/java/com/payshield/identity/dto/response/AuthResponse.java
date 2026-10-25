@@ -4,24 +4,20 @@ package com.payshield.identity.dto.response;
 public class AuthResponse {
 
     private String accessToken;
+    private String refreshToken;
     private String tokenType;
     private long expiresIn;
 
     public AuthResponse() {
     }
 
-    public AuthResponse(String accessToken) {
-        this.accessToken = accessToken;
-        this.tokenType = "Bearer";
-        this.expiresIn = 900; // 15 minutes in seconds
-    }
-
     public AuthResponse(
             String accessToken,
-            String tokenType,
+            String refreshToken,
             long expiresIn) {
         this.accessToken = accessToken;
-        this.tokenType = tokenType;
+        this.refreshToken = refreshToken;
+        this.tokenType = "Bearer";
         this.expiresIn = expiresIn;
     }
 
@@ -31,6 +27,14 @@ public class AuthResponse {
 
     public void setAccessToken(String accessToken) {
         this.accessToken = accessToken;
+    }
+
+    public String getRefreshToken() {
+        return refreshToken;
+    }
+
+    public void setRefreshToken(String refreshToken) {
+        this.refreshToken = refreshToken;
     }
 
     public String getTokenType() {
