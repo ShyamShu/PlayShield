@@ -7,6 +7,7 @@ import java.util.Locale;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -18,6 +19,7 @@ import com.payshield.identity.Entity.RefreshToken;
 import com.payshield.identity.Entity.Role;
 import com.payshield.identity.Entity.User;
 import com.payshield.identity.Enum.RoleName;
+import com.payshield.identity.Exception.InvalidCredentialsException;
 import com.payshield.identity.Repository.RoleRepository;
 import com.payshield.identity.Repository.UserRepository;
 import com.payshield.identity.Security.JwtTokenService;
@@ -90,13 +92,18 @@ public class AuthService {
 
         String email = normalizeEmail(request.getEmail());
 
-        Authentication authentication =
-                authenticationManager.authenticate(
-                        new UsernamePasswordAuthenticationToken(
-                                email,
-                                request.getPassword()
-                        )
-                );
+        Authentication authentication;
+
+        try {
+        authentication = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(
+                        email,
+                        request.getPassword()
+                )
+        );
+        } catch (AuthenticationException ex) {
+                throw new InvalidCredentialsException();
+        }
 
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException(

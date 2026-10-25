@@ -8,7 +8,6 @@ import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import java.util.Base64;
 import java.util.HexFormat;
-import java.util.List;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -16,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.payshield.identity.Entity.RefreshToken;
 import com.payshield.identity.Entity.User;
+import com.payshield.identity.Exception.InvalidRefreshTokenException;
 import com.payshield.identity.Repository.RefreshTokenRepository;
 
 @Service
@@ -25,17 +25,16 @@ public class RefreshTokenService {
     private static final long REFRESH_TOKEN_VALIDITY_DAYS = 7;
 
     private final RefreshTokenRepository refreshTokenRepository;
+    private final RefreshTokenRevocationService revocationService;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public RefreshTokenService(
-            RefreshTokenRepository refreshTokenRepository) {
+            RefreshTokenRepository refreshTokenRepository,
+            RefreshTokenRevocationService revocationService) {
         this.refreshTokenRepository = refreshTokenRepository;
+        this.revocationService = revocationService;
     }
 
-    /**
-     * Generates a random refresh token, stores only its SHA-256 hash,
-     * and returns the raw token to the caller.
-     */
     @Transactional
     public String createRefreshToken(User user) {
         byte[] randomBytes = new byte[TOKEN_BYTES];
@@ -45,73 +44,82 @@ public class RefreshTokenService {
                 .withoutPadding()
                 .encodeToString(randomBytes);
 
-        RefreshToken refreshToken = new RefreshToken();
-        refreshToken.setUser(user);
-        refreshToken.setTokenHash(hashToken(rawToken));
-        refreshToken.setExpiresAt(
+        RefreshToken token = new RefreshToken();
+        token.setUser(user);
+        token.setTokenHash(hashToken(rawToken));
+        token.setExpiresAt(
                 OffsetDateTime.now().plusDays(REFRESH_TOKEN_VALIDITY_DAYS)
         );
 
-        refreshTokenRepository.save(refreshToken);
-
+        refreshTokenRepository.save(token);
         return rawToken;
     }
 
-    /**
-     * Validates a refresh token and returns its database record.
-     */
-    @Transactional(readOnly = true)
+    @Transactional
     public RefreshToken validateRefreshToken(String rawToken) {
-        if (rawToken == null || rawToken.isBlank()) {
-            throw new IllegalArgumentException("Refresh token is required");
+        RefreshToken token = findToken(rawToken);
+
+        // A replacement link indicates that this token was rotated.
+        if (token.getReplacedBy() != null) {
+            revokeAllAfterReuse(token.getUser().getId());
         }
 
-        String tokenHash = hashToken(rawToken);
-
-        RefreshToken refreshToken = refreshTokenRepository
-                .findByTokenHash(tokenHash)
-                .orElseThrow(() ->
-                        new IllegalArgumentException("Invalid refresh token"));
-
-        if (!refreshToken.isActive()) {
+        if (!token.isActive()) {
             throw new IllegalArgumentException(
                     "Refresh token is expired or revoked"
             );
         }
 
-        return refreshToken;
+        return token;
     }
 
-    /**
-     * Rotates a valid token. The old token is revoked and linked
-     * to the newly persisted replacement token.
-     */
     @Transactional
     public String rotateRefreshToken(String rawToken) {
-        RefreshToken oldToken = validateRefreshToken(rawToken);
+        RefreshToken oldToken = findToken(rawToken);
 
-        User user = oldToken.getUser();
+        UUID userId = oldToken.getUser().getId();
 
-        // Create and persist the replacement token first.
-        String newRawToken = createRefreshToken(user);
+        // Detect replay of a token that was already rotated.
+        if (oldToken.getReplacedBy() != null) {
+            revokeAllAfterReuse(userId);
+        }
+
+        if (!oldToken.isActive()) {
+            throw new IllegalArgumentException(
+                    "Refresh token is expired or revoked"
+            );
+        }
+
+        // Only one concurrent request can change this row.
+        int updated = refreshTokenRepository.revokeIfActive(
+                oldToken.getId(),
+                OffsetDateTime.now()
+        );
+
+        if (updated != 1) {
+            // Another request may have rotated this token first.
+            revokeAllAfterReuse(userId);
+        }
+
+        // Synchronize the managed entity with the bulk database update.
+        oldToken.revoke();
+
+        // The replacement is created in the same transaction.
+        // If creation fails, the old-token revocation rolls back too.
+        String newRawToken = createRefreshToken(oldToken.getUser());
 
         RefreshToken newToken = refreshTokenRepository
                 .findByTokenHash(hashToken(newRawToken))
-                .orElseThrow(() ->
-                        new IllegalStateException(
-                                "Replacement refresh token was not persisted"));
+                .orElseThrow(() -> new IllegalStateException(
+                        "Replacement refresh token was not persisted"
+                ));
 
-        oldToken.revoke();
         oldToken.setReplacedBy(newToken);
-
         refreshTokenRepository.save(oldToken);
 
         return newRawToken;
     }
 
-    /**
-     * Revokes one refresh token.
-     */
     @Transactional
     public void revokeRefreshToken(String rawToken) {
         if (rawToken == null || rawToken.isBlank()) {
@@ -120,29 +128,38 @@ public class RefreshTokenService {
 
         refreshTokenRepository.findByTokenHash(hashToken(rawToken))
                 .ifPresent(token -> {
-                    token.revoke();
-                    refreshTokenRepository.save(token);
+                    if (token.getRevokedAt() == null) {
+                        token.revoke();
+                        refreshTokenRepository.save(token);
+                    }
                 });
     }
 
-    /**
-     * Revokes all non-revoked refresh tokens belonging to a user.
-     */
     @Transactional
     public void revokeAllUserTokens(UUID userId) {
-        List<RefreshToken> tokens =
-                refreshTokenRepository
-                        .findAllByUser_IdAndRevokedAtIsNull(userId);
-
-        tokens.forEach(RefreshToken::revoke);
-
-        refreshTokenRepository.saveAll(tokens);
+        revocationService.revokeAllUserTokens(userId);
     }
 
-    /**
-     * SHA-256 hex encoding produces exactly 64 characters,
-     * matching RefreshToken.tokenHash validation.
-     */
+    private RefreshToken findToken(String rawToken) {
+        if (rawToken == null || rawToken.isBlank()) {
+            throw new InvalidRefreshTokenException();
+        }
+
+        return refreshTokenRepository
+                .findByTokenHash(hashToken(rawToken))
+                .orElseThrow(() -> invalidToken("NOT_FOUND"));
+    }
+
+    private void revokeAllAfterReuse(UUID userId) {
+      
+
+        // Separate bean, REQUIRES_NEW transaction.
+        // Revocation commits before the exception is thrown.
+        revocationService.revokeAllUserTokens(userId);
+
+        throw new InvalidRefreshTokenException();
+    }
+
     private String hashToken(String rawToken) {
         try {
             MessageDigest digest =
@@ -156,7 +173,11 @@ public class RefreshTokenService {
 
         } catch (NoSuchAlgorithmException ex) {
             throw new IllegalStateException(
-                    "SHA-256 is unavailable", ex);
+                    "SHA-256 is unavailable", ex
+            );
         }
+    }
+    private InvalidRefreshTokenException invalidToken(String reason) {
+        return new InvalidRefreshTokenException();
     }
 }

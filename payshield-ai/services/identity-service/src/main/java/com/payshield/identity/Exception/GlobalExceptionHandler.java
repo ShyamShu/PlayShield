@@ -11,6 +11,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -267,5 +269,51 @@ public class GlobalExceptionHandler {
         request.setAttribute("traceId", traceId);
         return traceId;
     }
+
+
+    @ExceptionHandler(AccessDeniedException.class)
+        public ResponseEntity<ApiErrorResponse> handleAccessDenied(
+                AccessDeniedException ex,
+                HttpServletRequest request) {
+
+        ApiErrorResponse response = new ApiErrorResponse(
+                OffsetDateTime.now(),
+                HttpStatus.FORBIDDEN.value(),
+                HttpStatus.FORBIDDEN.getReasonPhrase(),
+                "FORBIDDEN",
+                "You do not have permission to access this resource",
+                request.getRequestURI(),
+                getTraceId(request),
+                List.of()
+        );
+
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+        }
+
+        @ExceptionHandler(AuthenticationException.class)
+        public ResponseEntity<ApiErrorResponse> handleAuthentication(
+                AuthenticationException ex,
+                HttpServletRequest request) {
+
+        ApiErrorResponse response = new ApiErrorResponse(
+                OffsetDateTime.now(),
+                HttpStatus.UNAUTHORIZED.value(),
+                HttpStatus.UNAUTHORIZED.getReasonPhrase(),
+                "UNAUTHORIZED",
+                "Authentication is required or invalid",
+                request.getRequestURI(),
+                getTraceId(request),
+                List.of()
+        );
+
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        }
+
+        private String getTraceId(HttpServletRequest request) {
+                String traceId = request.getHeader("X-Trace-Id");
+                return traceId != null && !traceId.isBlank()
+                        ? traceId
+                        : "N/A";
+        }
 }
 
