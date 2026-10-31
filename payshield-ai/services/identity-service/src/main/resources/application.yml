@@ -26,6 +26,6 @@ management:
 
 payshield:
   jwt:
-    issuer: "http://payshield-identity-service"
-    audience: "payshield-api"
+    issuer: ${JWT_ISSUER}
+    audience: ${JWT_AUDIENCE}
     access-token-ttl-minutes: 15
