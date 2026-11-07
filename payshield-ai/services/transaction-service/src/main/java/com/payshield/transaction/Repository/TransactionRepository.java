@@ -7,11 +7,14 @@ import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 import com.payshield.transaction.Entity.Transaction;
 
 public interface TransactionRepository
-        extends JpaRepository<Transaction, UUID> {
+        extends JpaRepository<Transaction, UUID> , JpaSpecificationExecutor<Transaction> {
+
+
 
     Page<Transaction> findByCustomerRef(
             String customerRef, Pageable pageable);
@@ -26,4 +29,9 @@ public interface TransactionRepository
             String idempotencyKey);
 
     boolean existsByIdempotencyKey(String idempotencyKey);
+
+    Optional<Transaction> findBySubmittedByAndIdempotencyKey(
+            UUID submittedBy,
+            String idempotencyKey
+    );
 }

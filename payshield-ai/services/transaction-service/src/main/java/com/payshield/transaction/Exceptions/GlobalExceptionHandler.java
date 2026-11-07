@@ -12,6 +12,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -99,17 +100,6 @@ public class GlobalExceptionHandler {
         );
     }
 
-    @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<ApiErrorResponse> handleMalformedJson(
-            HttpMessageNotReadableException ex,
-            HttpServletRequest request) {
-
-        return response(
-                HttpStatus.BAD_REQUEST,
-                "Malformed or invalid request body",
-                request
-        );
-    }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiErrorResponse> handleDataIntegrity(
@@ -160,5 +150,45 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.status(status).body(body);
     }
+
+
+    @ExceptionHandler(MissingRequestHeaderException.class)
+        public ResponseEntity<ApiErrorResponse> handleMissingRequestHeader(
+                MissingRequestHeaderException ex,
+                HttpServletRequest request
+        ) {
+
+        String message = "Required header '" + ex.getHeaderName()
+                + "' is missing";
+
+        ApiErrorResponse error = ApiErrorResponse.of(
+                HttpStatus.BAD_REQUEST.value(),
+                "Bad Request",
+                message,
+                request.getRequestURI()
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(error);
+        }
+
+        @ExceptionHandler(HttpMessageNotReadableException.class)
+        public ResponseEntity<ApiErrorResponse> handleInvalidRequestBody(
+                HttpMessageNotReadableException ex,
+                HttpServletRequest request
+        ) {
+
+        ApiErrorResponse error = ApiErrorResponse.of(
+                HttpStatus.BAD_REQUEST.value(),
+                "Bad Request",
+                "Request contains invalid JSON or an unsupported enum value",
+                request.getRequestURI()
+        );
+
+        return ResponseEntity
+                .badRequest()
+                .body(error);
+        }
 }
 

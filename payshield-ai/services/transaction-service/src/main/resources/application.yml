@@ -77,3 +77,7 @@ logging:
   # The MDC key must match the one your correlation filter sets
   pattern:
     level: "%5p [${spring.application.name:},%X{correlationId:-}]"
+  
+
+
+    
