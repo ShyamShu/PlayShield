@@ -23,17 +23,17 @@ public class TransactionPersistenceService {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public Transaction save(Transaction transaction) {
+    public Transaction save(Transaction transaction, String correlationId) {
 
         // 1. Save the transaction first.
         Transaction savedTransaction =
                 transactionRepository.saveAndFlush(transaction);
 
         // 2. Create and save the corresponding outbox event.
-        OutboxEvent event =
-                outboxEventService.saveTransactionSubmittedEvent(
-                        savedTransaction
-                );
+        OutboxEvent event = outboxEventService.saveTransactionSubmittedEvent(
+                savedTransaction,
+                correlationId
+        );
 
         // 3. Return the saved transaction.
         return savedTransaction;

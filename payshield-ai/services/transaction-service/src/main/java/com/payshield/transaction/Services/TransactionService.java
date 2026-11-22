@@ -66,6 +66,7 @@ public class TransactionService {
     public TransactionCreateResult createTransaction(
             CreateTransactionRequest request,
             String idempotencyKey,
+            String correlationId, 
             UUID submittedBy
     ) {
 
@@ -155,7 +156,7 @@ public class TransactionService {
         try {
 
             Transaction savedTransaction =
-                    persistenceService.save(transaction);
+                    persistenceService.save(transaction, correlationId);
 
             return new TransactionCreateResult(
                     TransactionResponse.fromEntity(savedTransaction),

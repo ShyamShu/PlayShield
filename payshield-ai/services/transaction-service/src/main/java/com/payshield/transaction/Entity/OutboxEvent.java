@@ -2,13 +2,14 @@ package com.payshield.transaction.Entity;
 
 
 import java.time.Instant;
-import java.util.Map;
 import java.util.UUID;
 
 import org.hibernate.annotations.Generated;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.generator.EventType;
 import org.hibernate.type.SqlTypes;
+
+import com.payshield.transaction.Dto.EventDto.TransactionSubmittedPayload;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -40,8 +41,8 @@ public class OutboxEvent {
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "payload", nullable = false, columnDefinition = "jsonb")
-    private Map<String, Object> payload;
-
+    private TransactionSubmittedPayload payload;
+    
     @Generated(event = EventType.INSERT)
     @Column(
         name = "created_at",
@@ -101,6 +102,9 @@ public class OutboxEvent {
     @Column(name = "last_error", columnDefinition = "text")
     private String lastError;
 
+    @Column(name = "partition_key", nullable = false, length = 64)
+    private String partitionKey;            
+
     public OutboxEvent() {
     }
 
@@ -120,6 +124,10 @@ public class OutboxEvent {
     }
 
     // Getters and setters
+
+    public void setPartitionKey(String partitionKey) {
+    this.partitionKey = partitionKey;
+}
 
     public UUID getId() {
         return id;
@@ -169,11 +177,11 @@ public class OutboxEvent {
         this.correlationId = correlationId;
     }
 
-    public Map<String, Object> getPayload() {
+    public TransactionSubmittedPayload getPayload() {
         return payload;
     }
 
-    public void setPayload(Map<String, Object> payload) {
+    public void setPayload(TransactionSubmittedPayload payload) {
         this.payload = payload;
     }
 
@@ -199,5 +207,9 @@ public class OutboxEvent {
 
     public void setAttempts(Integer attempts) {
         this.attempts = attempts;
+    }
+
+    public String getPartitionKey() {
+        return partitionKey;
     }
 } 

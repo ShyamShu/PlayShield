@@ -70,9 +70,9 @@ public class OutboxPublisherService {
 
             kafkaTemplate.send(
                     TOPIC,
-                    event.getAggregateId().toString(),
+                    event.getPartitionKey(),
                     json
-            ).get(130, TimeUnit.SECONDS);
+            ).get(30, TimeUnit.SECONDS);
 
             boolean published = deliveryStateService.markPublished(
                     event.getId(),

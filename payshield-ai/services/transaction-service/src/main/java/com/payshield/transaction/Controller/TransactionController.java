@@ -48,26 +48,35 @@ public class TransactionController {
     // =====================================================
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
+
     public ResponseEntity<TransactionResponse> createTransaction(
             @Valid @RequestBody CreateTransactionRequest request,
             @RequestHeader("Idempotency-Key") String idempotencyKey,
+            @RequestHeader(value = "X-Correlation-ID", required = false) String correlationId,
             @AuthenticationPrincipal Jwt jwt) {
 
         UUID submittedBy = extractUserId(jwt);
 
-        TransactionCreateResult result
-                = transactionService.createTransaction(
-                        request,
-                        idempotencyKey,
-                        submittedBy
-                );
+        String resolvedCorrelationId =
+        correlationId == null || correlationId.isBlank()
+                ? UUID.randomUUID().toString()
+                : correlationId.trim();
+
+        TransactionCreateResult result =
+        transactionService.createTransaction(
+                request,
+                idempotencyKey,
+                resolvedCorrelationId, // FIX
+                submittedBy
+        );
 
         HttpStatus status = result.created()
                 ? HttpStatus.CREATED
                 : HttpStatus.OK;
 
         return ResponseEntity
-                .status(status)
+                .status(result.created() ? HttpStatus.CREATED : HttpStatus.OK)
+                .header("X-Correlation-ID", resolvedCorrelationId)
                 .body(result.transaction());
     }
 

@@ -1,15 +1,18 @@
 package com.payshield.transaction.Services;
 
 
+import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.format.DateTimeFormatter;
+import java.util.Currency;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.payshield.transaction.Dto.EventDto.TransactionSubmittedPayload;
 import com.payshield.transaction.Entity.OutboxEvent;
 import com.payshield.transaction.Entity.Transaction;
 import com.payshield.transaction.Repository.OutboxEventRepository;
@@ -25,21 +28,28 @@ public class OutboxEventService {
         this.outboxEventRepository = outboxEventRepository;
     }
 
-    @Transactional(propagation = Propagation.MANDATORY)
     public OutboxEvent saveTransactionSubmittedEvent(
-            Transaction transaction) {
+        Transaction transaction,
+        String correlationId
+    ) {
+        TransactionSubmittedPayload payload =
+                buildPayload(transaction, correlationId);
 
         OutboxEvent event = new OutboxEvent();
 
+        event.setId(UUID.randomUUID());
         event.setAggregateType("TRANSACTION");
         event.setAggregateId(transaction.getId());
-
         event.setEventType("TRANSACTION_SUBMITTED");
         event.setSchemaVersion(1);
 
-        event.setPayload(buildPayload(transaction));
+        event.setCorrelationId(correlationId);
+        event.setPartitionKey(transaction.getCustomerRef());
+        event.setPayload(payload);
 
-        return outboxEventRepository.saveAndFlush(event);
+        event.setAttempts(0);
+
+        return outboxEventRepository.save(event);
     }
 
     private Map<String, Object> buildPayload(
@@ -83,5 +93,37 @@ public class OutboxEventService {
                     event.setAttempts(event.getAttempts() + 1);
                     outboxEventRepository.save(event);
                 });
+    }
+
+    private TransactionSubmittedPayload buildPayload(
+        Transaction transaction,
+        String correlationId
+    ) {
+        int fractionDigits = Currency.getInstance(
+                transaction.getCurrency()
+        ).getDefaultFractionDigits();
+
+        String amount = transaction.getAmount()
+                .setScale(fractionDigits, RoundingMode.UNNECESSARY)
+                .toPlainString();
+
+        String occurredAt = DateTimeFormatter.ISO_INSTANT.format(
+                transaction.getOccurredAt()
+        );
+
+        return new TransactionSubmittedPayload(
+                transaction.getId().toString(),
+                transaction.getCustomerRef(),
+                transaction.getMerchantRef(),
+                amount,
+                transaction.getCurrency(),
+                transaction.getTransactionType(),
+                transaction.getPaymentStatus(),
+                transaction.getChannel(),
+                transaction.getDeviceRef(),
+                transaction.getDescription(),
+                occurredAt,
+                correlationId
+        );
     }
 }
