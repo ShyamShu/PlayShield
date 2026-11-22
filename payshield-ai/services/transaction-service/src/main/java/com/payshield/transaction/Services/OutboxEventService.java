@@ -1,8 +1,10 @@
 package com.payshield.transaction.Services;
 
 
+import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -58,5 +60,28 @@ public class OutboxEventService {
         payload.put("submittedBy", transaction.getSubmittedBy());
 
         return payload;
+    }
+    @Transactional
+    public void markPublished(UUID eventId) {
+
+        OutboxEvent event = outboxEventRepository.findById(eventId)
+                .orElseThrow(() ->
+                        new IllegalStateException(
+                                "Outbox event not found: " + eventId
+                        ));
+
+        event.setPublishedAt(Instant.now());
+
+        outboxEventRepository.save(event);
+    }
+
+    @Transactional
+    public void recordFailure(UUID eventId) {
+
+        outboxEventRepository.findById(eventId)
+                .ifPresent(event -> {
+                    event.setAttempts(event.getAttempts() + 1);
+                    outboxEventRepository.save(event);
+                });
     }
 }

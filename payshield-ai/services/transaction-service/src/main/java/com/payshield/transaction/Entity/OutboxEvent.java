@@ -57,10 +57,54 @@ public class OutboxEvent {
     @Column(name = "attempts", nullable = false)
     private Integer attempts = 0;
 
+    @Column(name = "claim_token")
+    private UUID claimToken;
+
+    public void setClaimToken(UUID claimToken) {
+        this.claimToken = claimToken;
+    }
+
+    public void setClaimedUntil(Instant claimedUntil) {
+        this.claimedUntil = claimedUntil;
+    }
+
+    public void setNextAttemptAt(Instant nextAttemptAt) {
+        this.nextAttemptAt = nextAttemptAt;
+    }
+
+    public void setLastError(String lastError) {
+        this.lastError = lastError;
+    }
+
+    public UUID getClaimToken() {
+        return claimToken;
+    }
+
+    public Instant getClaimedUntil() {
+        return claimedUntil;
+    }
+
+    public Instant getNextAttemptAt() {
+        return nextAttemptAt;
+    }
+
+    public String getLastError() {
+        return lastError;
+    }
+
+    @Column(name = "claimed_until")
+    private Instant claimedUntil;
+
+    @Column(name = "next_attempt_at", nullable = false)
+    private Instant nextAttemptAt;
+
+    @Column(name = "last_error", columnDefinition = "text")
+    private String lastError;
+
     public OutboxEvent() {
     }
 
-    @PrePersist
+   @PrePersist
     public void prePersist() {
         if (id == null) {
             id = UUID.randomUUID();
@@ -68,6 +112,10 @@ public class OutboxEvent {
 
         if (attempts == null) {
             attempts = 0;
+        }
+
+        if (nextAttemptAt == null) {
+            nextAttemptAt = Instant.now();
         }
     }
 
