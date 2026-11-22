@@ -44,7 +44,23 @@ spring:
           jwk-set-uri: ${IDENTITY_JWKS_URI:http://localhost:8081/.well-known/jwks.json}
 
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9093}
+    bootstrap-servers: localhost:9093
+
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+
+      # Wait for the broker to acknowledge the record.
+      acks: all
+
+      # Retry transient broker errors.
+      retries: 10
+
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
+        delivery.timeout.ms: 120000
+        request.timeout.ms: 3000
 
 # Custom properties: bind these to a @ConfigurationProperties record,
 # and use them in your issuer and audience validators.
@@ -77,3 +93,7 @@ logging:
   # The MDC key must match the one your correlation filter sets
   pattern:
     level: "%5p [${spring.application.name:},%X{correlationId:-}]"
+  
+
+
+    

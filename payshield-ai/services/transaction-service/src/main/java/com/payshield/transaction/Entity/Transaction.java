@@ -5,6 +5,9 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
+import org.hibernate.annotations.Generated;
+import org.hibernate.generator.EventType;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -61,7 +64,7 @@ public class Transaction {
     @Column(name = "description", length = 500)
     private String description;                                
 
-
+    @Generated(event = EventType.INSERT)
     @Column(name = "created_at", nullable = false,
             insertable = false, updatable = false)
     private Instant createdAt;
